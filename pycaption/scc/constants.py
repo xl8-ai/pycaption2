@@ -927,6 +927,7 @@ PAC_BYTES_TO_POSITIONING_MAP = {
 # Tab Offset command
 # - this moves the positioning 1, 2, or 3 columns to the right
 PAC_TAB_OFFSET_COMMANDS = {'97a1': 1, '97a2': 2, '9723': 3}
+PAC_TAB_OFFSET_COMMANDS_REV = {v: k for k, v in PAC_TAB_OFFSET_COMMANDS.items()}
 
 
 def _create_position_to_bytes_map(bytes_to_pos):
