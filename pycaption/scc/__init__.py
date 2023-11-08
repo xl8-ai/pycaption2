@@ -94,7 +94,8 @@ from .constants import (
     MICROSECONDS_PER_CODEWORD, CHARACTER_TO_CODE,
     SPECIAL_OR_EXTENDED_CHAR_TO_CODE, PAC_BYTES_TO_POSITIONING_MAP,
     PAC_HIGH_BYTE_BY_ROW, PAC_LOW_BYTE_BY_ROW_RESTRICTED,
-    PAC_TAB_OFFSET_COMMANDS,
+    PAC_TAB_OFFSET_COMMANDS, POSITIONING_TO_PAC_MAP,
+    PAC_TAB_OFFSET_COMMANDS_REV,
 )
 from .specialized_collections import (  # noqa: F401
     TimingCorrectingCaptionList, NotifyingDict, CaptionCreator,
@@ -570,12 +571,27 @@ class SCCWriter(BaseWriter):
     def _text_to_code(self, s):
         code = ''
         lines = self._layout_line(s).split('\n')
-        for row, line in enumerate(lines):
+        
+        spaces = []
+        for i, _ in enumerate(lines):
+            space = (32 - len(lines[i])) // 2
+            spaces.append(space)
+
+        for row, (line, space) in enumerate((zip(lines, spaces))):
             row += 16 - len(lines)
-            # Move cursor to column 0 of the destination row
+            # Move cursor to the destination col of the destination row
+            col_big = space // 4 * 4
+            col_small = space % 4
             for _ in range(2):
-                code += (PAC_HIGH_BYTE_BY_ROW[row]
-                         + f'{PAC_LOW_BYTE_BY_ROW_RESTRICTED[row]} ')
+                if col_big:
+                    code += ''.join(POSITIONING_TO_PAC_MAP[row][col_big][0]) + " "
+                else:
+                    code += (PAC_HIGH_BYTE_BY_ROW[row]
+                            + f'{PAC_LOW_BYTE_BY_ROW_RESTRICTED[row]} ')
+            if col_small:
+                for _ in range(2):    
+                    code += PAC_TAB_OFFSET_COMMANDS_REV[col_small] + " "
+
             # Print the line using the SCC encoding
             for char in line:
                 code = self._print_character(code, char)
