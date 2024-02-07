@@ -89,6 +89,7 @@ from pycaption.base import (
 )
 from pycaption.exceptions import CaptionReadNoCaptions, InvalidInputError, \
     CaptionReadTimingError, CaptionLineLengthError
+from pycaption.geometry import VerticalAlignmentEnum
 from .constants import (
     HEADER, COMMANDS, SPECIAL_CHARS, EXTENDED_CHARS, CHARACTERS,
     MICROSECONDS_PER_CODEWORD, CHARACTER_TO_CODE,
@@ -579,28 +580,38 @@ class SCCWriter(BaseWriter):
             return code
 
     def _text_to_code(self, s):
-        code = ''
-        lines = self._layout_line(s).split('\n')
-        
-        spaces = []
-        for i, _ in enumerate(lines):
-            space = (32 - len(lines[i])) // 2
-            spaces.append(space)
+        code = ""
+        lines = self._layout_line(s).split("\n")
 
-        for row, (line, space) in enumerate((zip(lines, spaces))):
-            row += 16 - len(lines)
+        vertical_alignment = (
+            s.layout_info.alignment.vertical
+            if s.layout_info and s.layout_info.alignment and s.layout_info.alignment.vertical
+            else VerticalAlignmentEnum.BOTTOM
+        )
+
+        if vertical_alignment == VerticalAlignmentEnum.TOP:
+            start_row = 1
+        elif vertical_alignment == VerticalAlignmentEnum.CENTER:
+            start_row = 8 - ((len(lines) - 1) // 2)
+        else:
+            start_row = 16 - len(lines)
+
+        for row, line in enumerate(lines, start_row):
             # Move cursor to the destination col of the destination row
+            space = (32 - len(line)) // 2
             col_big = space // 4 * 4
             col_small = space % 4
             for _ in range(2):
                 if col_big:
-                    code += ''.join(POSITIONING_TO_PAC_MAP[row][col_big][0]) + " "
+                    code += "".join(POSITIONING_TO_PAC_MAP[row][col_big][0]) + " "
                 else:
-                    code += (PAC_HIGH_BYTE_BY_ROW[row]
-                            + f'{PAC_LOW_BYTE_BY_ROW_RESTRICTED[row]} ')
+                    code += f"{PAC_HIGH_BYTE_BY_ROW[row]}{PAC_LOW_BYTE_BY_ROW_RESTRICTED[row]} "
             if col_small:
-                for _ in range(2):    
+                for _ in range(2):
                     code += PAC_TAB_OFFSET_COMMANDS_REV[col_small] + " "
+
+            if s.style and s.style.get("font-style") == "italic":
+                code += "91ae 91ae "
 
             # Print the line using the SCC encoding
             for char in line:
