@@ -1,5 +1,5 @@
-from itertools import product
 from collections import defaultdict
+from itertools import product
 
 COMMANDS = {
     '9420': '',
@@ -975,12 +975,8 @@ CHARACTER_TO_CODE = {
     for code, character in CHARACTERS.items()
 }
 
-SPECIAL_OR_EXTENDED_CHAR_TO_CODE = {
-    character: code for code, character in EXTENDED_CHARS.items()
-}
-SPECIAL_OR_EXTENDED_CHAR_TO_CODE.update(
-    {character: code for code, character in SPECIAL_CHARS.items()}
-)
+EXTENDED_CHAR_TO_CODE = {character: code for code, character in EXTENDED_CHARS.items()}
+SPECIAL_CHAR_TO_CODE = {character: code for code, character in SPECIAL_CHARS.items()}
 
 # Time to transmit a single codeword = 1 second / 29.97
 MICROSECONDS_PER_CODEWORD = 1000.0 * 1000.0 / (30.0 * 1000.0 / 1001.0)

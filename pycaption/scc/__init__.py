@@ -77,31 +77,43 @@ http://www.theneitherworld.com/mcpoodle/SCC_TOOLS/DOCS/SCC_FORMAT.HTML
  dictionary. This is legacy logic, that I didn't know how to handle, and
  just carried over when implementing positioning.
 """
-
 import math
 import re
 import textwrap
 from collections import deque
 from copy import deepcopy
 
-from pycaption.base import (
-    BaseReader, BaseWriter, CaptionSet, CaptionNode,
-)
-from pycaption.exceptions import CaptionReadNoCaptions, InvalidInputError, \
-    CaptionReadTimingError, CaptionLineLengthError
+from pycaption.base import BaseReader
+from pycaption.base import BaseWriter
+from pycaption.base import CaptionNode
+from pycaption.base import CaptionSet
+from pycaption.exceptions import CaptionLineLengthError
+from pycaption.exceptions import CaptionReadNoCaptions
+from pycaption.exceptions import CaptionReadTimingError
+from pycaption.exceptions import InvalidInputError
 from pycaption.geometry import VerticalAlignmentEnum
-from .constants import (
-    HEADER, COMMANDS, SPECIAL_CHARS, EXTENDED_CHARS, CHARACTERS,
-    MICROSECONDS_PER_CODEWORD, CHARACTER_TO_CODE,
-    SPECIAL_OR_EXTENDED_CHAR_TO_CODE, PAC_BYTES_TO_POSITIONING_MAP,
-    PAC_HIGH_BYTE_BY_ROW, PAC_LOW_BYTE_BY_ROW_RESTRICTED,
-    PAC_TAB_OFFSET_COMMANDS, POSITIONING_TO_PAC_MAP,
-    PAC_TAB_OFFSET_COMMANDS_REV,
-)
-from .specialized_collections import (  # noqa: F401
-    TimingCorrectingCaptionList, NotifyingDict, CaptionCreator,
-    InstructionNodeCreator, PopOnCue,
-)
+
+from .constants import CHARACTER_TO_CODE
+from .constants import CHARACTERS
+from .constants import COMMANDS
+from .constants import EXTENDED_CHAR_TO_CODE
+from .constants import EXTENDED_CHARS
+from .constants import HEADER
+from .constants import INCONVERTIBLE_TO_ASCII_EXTENDED_CHARS_ASSOCIATION
+from .constants import MICROSECONDS_PER_CODEWORD
+from .constants import PAC_BYTES_TO_POSITIONING_MAP
+from .constants import PAC_HIGH_BYTE_BY_ROW
+from .constants import PAC_LOW_BYTE_BY_ROW_RESTRICTED
+from .constants import PAC_TAB_OFFSET_COMMANDS
+from .constants import PAC_TAB_OFFSET_COMMANDS_REV
+from .constants import POSITIONING_TO_PAC_MAP
+from .constants import SPECIAL_CHAR_TO_CODE
+from .constants import SPECIAL_CHARS
+from .specialized_collections import CaptionCreator
+from .specialized_collections import InstructionNodeCreator
+from .specialized_collections import NotifyingDict
+from .specialized_collections import PopOnCue
+from .specialized_collections import TimingCorrectingCaptionList
 from .state_machines import DefaultProvidingPositionTracker
 
 
@@ -114,8 +126,8 @@ class NodeCreatorFactory:
     this information must be erased after the reader's .read() operation
     completes.
     """
-    def __init__(self, position_tracker,
-                 node_creator=InstructionNodeCreator):
+
+    def __init__(self, position_tracker, node_creator=InstructionNodeCreator):
         self.position_tracker = position_tracker
         self.node_creator = node_creator
 
@@ -132,10 +144,7 @@ class NodeCreatorFactory:
 
         :return: a node_creator instance
         """
-        return self.node_creator.from_list(
-            roll_rows,
-            position_tracker=self.position_tracker
-        )
+        return self.node_creator.from_list(roll_rows, position_tracker=self.position_tracker)
 
 
 def fix_last_captions_without_ending(caption_list):
@@ -157,25 +166,24 @@ class SCCReader(BaseReader):
 
     This can be then later used for converting into any other supported formats
     """
+
     def __init__(self, *args, **kw):
         self.caption_stash = CaptionCreator()
         self.time_translator = _SccTimeTranslator()
 
-        self.node_creator_factory = NodeCreatorFactory(
-            DefaultProvidingPositionTracker()
-        )
+        self.node_creator_factory = NodeCreatorFactory(DefaultProvidingPositionTracker())
 
-        self.last_command = ''
+        self.last_command = ""
 
         self.buffer_dict = NotifyingDict()
 
-        self.buffer_dict['pop'] = self.node_creator_factory.new_creator()
-        self.buffer_dict['paint'] = self.node_creator_factory.new_creator()
-        self.buffer_dict['roll'] = self.node_creator_factory.new_creator()
+        self.buffer_dict["pop"] = self.node_creator_factory.new_creator()
+        self.buffer_dict["paint"] = self.node_creator_factory.new_creator()
+        self.buffer_dict["roll"] = self.node_creator_factory.new_creator()
 
         # Call this method when the active key changes
         self.buffer_dict.add_change_observer(self._flush_implicit_buffers)
-        self.buffer_dict.set_active('pop')
+        self.buffer_dict.set_active("pop")
 
         self.pop_ons_queue = deque()
 
@@ -198,7 +206,7 @@ class SCCReader(BaseReader):
         else:
             return False
 
-    def read(self, content, lang='en-US', simulate_roll_up=False, offset=0):
+    def read(self, content, lang="en-US", simulate_roll_up=False, offset=0):
         """Converts the unicode string into a CaptionSet
 
         :type content: str
@@ -218,7 +226,7 @@ class SCCReader(BaseReader):
         :rtype: CaptionSet
         """
         if not isinstance(content, str):
-            raise InvalidInputError('The content is not a unicode string.')
+            raise InvalidInputError("The content is not a unicode string.")
 
         self.simulate_roll_up = simulate_roll_up
         self.time_translator.offset = offset * 1000000
@@ -245,9 +253,7 @@ class SCCReader(BaseReader):
             for line in lines_too_long:
                 msg += line + f" - Length { len(line)}" + "\n"
             raise CaptionLineLengthError(
-                f"32 character limit for caption cue in scc file.\n"
-                f"Lines longer than 32:\n"
-                f"{msg}"
+                f"32 character limit for caption cue in scc file.\n" f"Lines longer than 32:\n" f"{msg}"
             )
 
         for cap in captions.get_captions(lang):
@@ -256,9 +262,10 @@ class SCCReader(BaseReader):
             # EOC marker in the SCC file)
             if 0 < cap.end - cap.start < 50000:
                 raise CaptionReadTimingError(
-                    f'Unsupported cue duration around {cap.format_start()} '
+                    f"Unsupported cue duration around {cap.format_start()} "
                     f'for line beginning with "{cap.get_text()}". Duration '
-                    f'must be at least 0.05 seconds.')
+                    f"must be at least 0.05 seconds."
+                )
 
         if captions.is_empty():
             raise CaptionReadNoCaptions("empty caption file")
@@ -278,22 +285,22 @@ class SCCReader(BaseReader):
         If they're on the last row however, or if the caption type is changing,
         we make sure to convert the buffers to text, so we don't lose any info.
         """
-        if old_key == 'pop':
+        if old_key == "pop":
             if self.pop_ons_queue:
                 self._pop_on()
 
-        elif old_key == 'roll':
+        elif old_key == "roll":
             if not self.buffer.is_empty():
                 self._roll_up()
 
-        elif old_key == 'paint':
+        elif old_key == "paint":
             if not self.buffer.is_empty():
                 self.caption_stash.create_and_store(self.buffer, self.time)
                 self.buffer = self.node_creator_factory.new_creator()
 
     def _translate_line(self, line):
         # ignore blank lines
-        if line.strip() == '':
+        if line.strip() == "":
             return
 
         # split line in timestamp and words
@@ -303,7 +310,7 @@ class SCCReader(BaseReader):
         self.time_translator.start_at(parts[0][0])
 
         # loop through each word
-        for word in parts[0][2].split(' '):
+        for word in parts[0][2].split(" "):
             # ignore empty results or invalid commands
             word = word.strip()
             if len(word) == 4:
@@ -343,12 +350,12 @@ class SCCReader(BaseReader):
         # with only one member of each pair being displayed.
         if word in COMMANDS or _is_pac_command(word) or word in SPECIAL_CHARS or word in EXTENDED_CHARS:
             if word == self.last_command:
-                self.last_command = ''
+                self.last_command = ""
                 return True
             # Fix for the <position> <tab offset> <position> <tab offset>
             # repetition
             elif _is_pac_command(word) and word in self.last_command:
-                self.last_command = ''
+                self.last_command = ""
                 return True
             elif word in PAC_TAB_OFFSET_COMMANDS:
                 if _is_pac_command(self.last_command):
@@ -371,38 +378,35 @@ class SCCReader(BaseReader):
 
     def _translate_command(self, word):
         # if command is pop_up
-        if word == '9420':
-            self.buffer_dict.set_active('pop')
+        if word == "9420":
+            self.buffer_dict.set_active("pop")
 
         # command is paint_on [Resume Direct Captioning]
-        elif word == '9429':
-            self.buffer_dict.set_active('paint')
+        elif word == "9429":
+            self.buffer_dict.set_active("paint")
 
             self.roll_rows_expected = 1
             if not self.buffer.is_empty():
-                self.caption_stash.create_and_store(
-                    self.buffer, self.time
-                )
+                self.caption_stash.create_and_store(self.buffer, self.time)
                 self.buffer = self.node_creator_factory.new_creator()
 
             self.time = self.time_translator.get_time()
 
         # if command is roll_up 2, 3 or 4 rows
-        elif word in ('9425', '9426', '94a7'):
-            self.buffer_dict.set_active('roll')
+        elif word in ("9425", "9426", "94a7"):
+            self.buffer_dict.set_active("roll")
 
             # count how many lines are expected
-            if word == '9425':
+            if word == "9425":
                 self.roll_rows_expected = 2
-            elif word == '9426':
+            elif word == "9426":
                 self.roll_rows_expected = 3
-            elif word == '94a7':
+            elif word == "94a7":
                 self.roll_rows_expected = 4
 
             # if content is in the queue, turn it into a caption
             if not self.buffer.is_empty():
-                self.caption_stash.create_and_store(
-                    self.buffer, self.time)
+                self.caption_stash.create_and_store(self.buffer, self.time)
                 self.buffer = self.node_creator_factory.new_creator()
 
             # set rows to empty, configure start time for caption
@@ -410,11 +414,11 @@ class SCCReader(BaseReader):
             self.time = self.time_translator.get_time()
 
         # clear pop_on buffer
-        elif word == '94ae':
+        elif word == "94ae":
             self.buffer = self.node_creator_factory.new_creator()
 
         # display pop_on buffer [End Of Caption]
-        elif word == '942f':
+        elif word == "942f":
             self.time = self.time_translator.get_time()
             if self.pop_ons_queue:
                 # there's a pop-on cue not ended by the 942c command
@@ -426,14 +430,14 @@ class SCCReader(BaseReader):
             self.buffer = self.node_creator_factory.new_creator()
 
         # roll up captions [Carriage Return]
-        elif word == '94ad':
+        elif word == "94ad":
             # display roll-up buffer
             if not self.buffer.is_empty():
                 self._roll_up()
 
         # 942c - Erase Displayed Memory - Clear the current screen of any
         # displayed captions or text.
-        elif word == '942c' and self.pop_ons_queue:
+        elif word == "942c" and self.pop_ons_queue:
             self._pop_on(end=self.time_translator.get_time())
 
         # If command is not one of the aforementioned, add it to buffer
@@ -476,8 +480,7 @@ class SCCReader(BaseReader):
                     self.roll_rows.pop(0)
 
                 self.roll_rows.append(self.buffer)
-                self.buffer = self.node_creator_factory.from_list(
-                    self.roll_rows)
+                self.buffer = self.node_creator_factory.from_list(self.roll_rows)
 
         # convert buffer and empty
         self.caption_stash.create_and_store(self.buffer, self.time)
@@ -491,8 +494,7 @@ class SCCReader(BaseReader):
 
     def _pop_on(self, end=0):
         pop_on_cue = self.pop_ons_queue.pop()
-        self.caption_stash.create_and_store(
-            pop_on_cue.buffer, pop_on_cue.start, end)
+        self.caption_stash.create_and_store(pop_on_cue.buffer, pop_on_cue.start, end)
 
 
 class SCCWriter(BaseWriter):
@@ -500,7 +502,7 @@ class SCCWriter(BaseWriter):
         super().__init__(*args, **kw)
 
     def write(self, caption_set):
-        output = HEADER + '\n\n'
+        output = HEADER + "\n\n"
 
         if caption_set.is_empty():
             return output
@@ -512,32 +514,31 @@ class SCCWriter(BaseWriter):
         captions = caption_set.get_captions(lang)
 
         # PASS 1: compute codes for each caption
-        codes = [(self._text_to_code(caption), caption.start, caption.end)
-                 for caption in captions]
+        codes = [(self._text_to_code(caption), caption.start, caption.end) for caption in captions]
 
         # PASS 2:
         # Advance start times so as to have time to write to the pop-on
         # buffer; possibly remove the previous clear-screen command
         for index, (code, start, end) in enumerate(codes):
-            code_words = len(code) / 5 + 8
+            # Subtract 1 code word because the last code word (942f) should be at the start frame.
+            code_words = len(code) / 5 + 4 - 1
             code_time_microseconds = code_words * MICROSECONDS_PER_CODEWORD
             code_start = start - code_time_microseconds
-            if index == 0:
-                continue
-            previous_code, previous_start, previous_end = codes[index - 1]
-            if previous_end + 3 * MICROSECONDS_PER_CODEWORD >= code_start:
-                codes[index - 1] = (previous_code, previous_start, None)
+            if index > 0:
+                previous_code, previous_start, previous_end = codes[index - 1]
+                if previous_end + 2 * MICROSECONDS_PER_CODEWORD >= code_start:
+                    codes[index - 1] = (previous_code, previous_start, None)
             codes[index] = (code, code_start, end)
 
         # PASS 3:
         # Write captions.
-        for (code, start, end) in codes:
-            output += f'{self._format_timestamp(start)}\t'
-            output += '94ae 94ae 9420 9420 '
+        for code, start, end in codes:
+            output += f"{self._format_timestamp(start)}\t"
+            output += "94ae 9420 "
             output += code
-            output += '942c 942c 942f 942f\n\n'
+            output += "942c 942f\n\n"
             if end is not None:
-                output += f'{self._format_timestamp(end)}\t942c 942c\n\n'
+                output += f"{self._format_timestamp(end)}\t942c\n\n"
 
         return output
 
@@ -545,39 +546,37 @@ class SCCWriter(BaseWriter):
     @staticmethod
     def _layout_line(caption):
         caption_text = "".join(caption.get_text_nodes())
-        inner_lines = caption_text.split('\n')
+        inner_lines = caption_text.split("\n")
         inner_lines_laid_out = [textwrap.fill(x, 32) for x in inner_lines]
-        return '\n'.join(inner_lines_laid_out)
+        return "\n".join(inner_lines_laid_out)
 
     @staticmethod
     def _maybe_align(code):
         # Finish a half-word with a no-op so we can move to a full word
         if len(code) % 5 == 2:
-            code += '80 '
+            code += "80 "
         return code
 
     @staticmethod
     def _maybe_space(code):
         if len(code) % 5 == 4:
-            code += ' '
+            code += " "
         return code
 
     def _print_character(self, code, char):
-        try:
-            char_code = CHARACTER_TO_CODE[char]
-        except KeyError:
+        if char in CHARACTER_TO_CODE:
+            return code + CHARACTER_TO_CODE[char]
+        if char in SPECIAL_CHAR_TO_CODE:
+            char_code = SPECIAL_CHAR_TO_CODE[char]
+            return f"{self._maybe_align(code)}{char_code} {char_code}"
+        if char in EXTENDED_CHAR_TO_CODE:
+            char_code = EXTENDED_CHAR_TO_CODE[char]
             try:
-                char_code = SPECIAL_OR_EXTENDED_CHAR_TO_CODE[char]
+                fallback_code = CHARACTER_TO_CODE[INCONVERTIBLE_TO_ASCII_EXTENDED_CHARS_ASSOCIATION[char][0]]
             except KeyError:
-                char_code = '91b6'  # Use £ as "unknown character" symbol
-
-        if len(char_code) == 2:
-            return code + char_code
-        elif len(char_code) == 4:
-            return self._maybe_align(code) + char_code
-        else:
-            # This should not happen!
-            return code
+                fallback_code = ""  # Fallback character seems to be optional anyway.
+            return self._maybe_align(self._maybe_space(code + fallback_code)) + char_code
+        return code + CHARACTER_TO_CODE["?"]
 
     def _text_to_code(self, s):
         code = ""
@@ -598,20 +597,20 @@ class SCCWriter(BaseWriter):
 
         for row, line in enumerate(lines, start_row):
             # Move cursor to the destination col of the destination row
+            if not line:
+                continue
             space = (32 - len(line)) // 2
             col_big = space // 4 * 4
             col_small = space % 4
-            for _ in range(2):
-                if col_big:
-                    code += "".join(POSITIONING_TO_PAC_MAP[row][col_big][0]) + " "
-                else:
-                    code += f"{PAC_HIGH_BYTE_BY_ROW[row]}{PAC_LOW_BYTE_BY_ROW_RESTRICTED[row]} "
+            if col_big:
+                code += "".join(POSITIONING_TO_PAC_MAP[row][col_big][0]) + " "
+            else:
+                code += f"{PAC_HIGH_BYTE_BY_ROW[row]}{PAC_LOW_BYTE_BY_ROW_RESTRICTED[row]} "
             if col_small:
-                for _ in range(2):
-                    code += PAC_TAB_OFFSET_COMMANDS_REV[col_small] + " "
+                code += PAC_TAB_OFFSET_COMMANDS_REV[col_small] + " "
 
             if s.style and s.style.get("font-style") == "italic":
-                code += "91ae 91ae "
+                code += "91ae "
 
             # Print the line using the SCC encoding
             for char in line:
@@ -631,15 +630,15 @@ class SCCWriter(BaseWriter):
         seconds_float -= minutes * 60
         seconds = math.floor(seconds_float)
         seconds_float -= seconds
-        frames = math.floor(seconds_float * 30)
-        return f'{hours:02}:{minutes:02}:{seconds:02}:{frames:02}'
+        frames = round(seconds_float * 30)
+        return f"{hours:02}:{minutes:02}:{seconds:02}:{frames:02}"
 
 
 class _SccTimeTranslator:
     """Converts SCC time to microseconds, keeping track of frames passed"""
 
     def __init__(self):
-        self._time = '00:00:00;00'
+        self._time = "00:00:00;00"
 
         # microseconds. The offset from which we begin the time calculation
         self.offset = 0
@@ -651,10 +650,7 @@ class _SccTimeTranslator:
 
         :rtype: int
         """
-        return self._translate_time(
-            self._time[:-2] + str(int(self._time[-2:]) + self._frames),
-            self.offset
-        )
+        return self._translate_time(self._time[:-2] + str(int(self._time[-2:]) + self._frames), self.offset)
 
     @staticmethod
     def _translate_time(stamp, offset):
@@ -665,13 +661,14 @@ class _SccTimeTranslator:
             Helpful for when the captions are off by some time interval.
         :rtype: int
         """
-        if not re.match(r'\d{2}:\d{2}:\d{2}[:;]\d{1,2}', stamp):
+        if not re.match(r"\d{2}:\d{2}:\d{2}[:;]\d{1,2}", stamp):
             raise CaptionReadTimingError(
                 "Timestamps should follow the hour:minute:seconds"
                 ";frames or hour:minute:seconds:frames format. Please correct "
-                f"the following time: {stamp}.")
+                f"the following time: {stamp}."
+            )
 
-        if ';' in stamp:
+        if ";" in stamp:
             # Drop-frame timebase runs at the same rate as wall clock
             seconds_per_timestamp_second = 1.0
         else:
@@ -679,12 +676,11 @@ class _SccTimeTranslator:
             # 1 second of timecode is longer than an actual second (1.001s)
             seconds_per_timestamp_second = 1001.0 / 1000.0
 
-        time_split = stamp.replace(';', ':').split(':')
+        time_split = stamp.replace(";", ":").split(":")
 
-        timestamp_seconds = (int(time_split[0]) * 3600
-                             + int(time_split[1]) * 60
-                             + int(time_split[2])
-                             + int(time_split[3]) / 30.0)
+        timestamp_seconds = (
+            int(time_split[0]) * 3600 + int(time_split[1]) * 60 + int(time_split[2]) + int(time_split[3]) / 30.0
+        )
 
         seconds = timestamp_seconds * seconds_per_timestamp_second
         microseconds = seconds * 1000 * 1000 - offset

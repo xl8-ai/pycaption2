@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 import os
-from setuptools import setup, find_packages
+
+from setuptools import find_packages
+from setuptools import setup
 
 README_PATH = os.path.join(
     os.path.abspath(os.path.dirname(__file__)),
@@ -24,7 +26,7 @@ transcript_dependencies = [
 
 setup(
     name='pycaption',
-    version='2.2.4.post1',
+    version='2.2.4.post2',
     description='Closed caption converter',
     long_description=open(README_PATH).read(),
     author='Joe Norton',
