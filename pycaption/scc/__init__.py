@@ -533,12 +533,12 @@ class SCCWriter(BaseWriter):
         # PASS 3:
         # Write captions.
         for code, start, end in codes:
-            output += f"{self._format_timestamp(start)}\t"
+            output += f"{self._format_timestamp(max(0, start))}\t"
             output += "94ae 9420 "
             output += code
             output += "942c 942f\n\n"
             if end is not None:
-                output += f"{self._format_timestamp(end)}\t942c\n\n"
+                output += f"{self._format_timestamp(max(0, end))}\t942c\n\n"
 
         return output
 
