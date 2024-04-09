@@ -2,13 +2,13 @@ import collections
 import unicodedata
 
 from ..base import CaptionList, Caption, CaptionNode
-from ..geometry import (
-    UnitEnum, Size, Layout, Point, Alignment,
-    VerticalAlignmentEnum, HorizontalAlignmentEnum
-)
+from ..geometry import UnitEnum, Size, Layout, Point, Alignment, VerticalAlignmentEnum, HorizontalAlignmentEnum
 from .constants import (
-    PAC_BYTES_TO_POSITIONING_MAP, COMMANDS, PAC_TAB_OFFSET_COMMANDS,
-    MICROSECONDS_PER_CODEWORD, INCONVERTIBLE_TO_ASCII_EXTENDED_CHARS_ASSOCIATION
+    PAC_BYTES_TO_POSITIONING_MAP,
+    COMMANDS,
+    PAC_TAB_OFFSET_COMMANDS,
+    MICROSECONDS_PER_CODEWORD,
+    INCONVERTIBLE_TO_ASCII_EXTENDED_CHARS_ASSOCIATION,
 )
 
 PopOnCue = collections.namedtuple("PopOnCue", "buffer, start, end")
@@ -31,9 +31,7 @@ class PreCaption:
         self.layout_info = None
 
     def to_real_caption(self):
-        return Caption(
-            self.start, self.end, self.nodes, self.style, self.layout_info
-        )
+        return Caption(self.start, self.end, self.nodes, self.style, self.layout_info)
 
 
 class TimingCorrectingCaptionList(list):
@@ -45,6 +43,7 @@ class TimingCorrectingCaptionList(list):
 
     Also, doesn't allow Nones or empty captions
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._last_batch = ()
@@ -98,9 +97,7 @@ class TimingCorrectingCaptionList(list):
 
         new_caption = new_captions[0]
 
-        if batch and (batch[-1].end == 0
-                      or new_caption.start - batch[-1].end
-                      < 5 * MICROSECONDS_PER_CODEWORD + 1):
+        if batch and (batch[-1].end == 0 or new_caption.start - batch[-1].end < 5 * MICROSECONDS_PER_CODEWORD + 1):
             for caption in batch:
                 caption.end = new_caption.start
 
@@ -109,6 +106,7 @@ class NotifyingDict(dict):
     """Dictionary-like object, that treats one key as 'active',
     and notifies observers if the active key changed
     """
+
     # Need an unhashable object as initial value for the active key.
     # That way we're sure this was never a key in the dict.
     _guard = {}
@@ -124,7 +122,7 @@ class NotifyingDict(dict):
         :param key: any hashable object
         """
         if key not in self:
-            raise ValueError('No such key present')
+            raise ValueError("No such key present")
 
         # Notify observers of the change
         if key != self.active_key:
@@ -136,7 +134,7 @@ class NotifyingDict(dict):
     def get_active(self):
         """Returns the value corresponding to the active key"""
         if self.active_key is self._guard:
-            raise KeyError('No active key set')
+            raise KeyError("No active key set")
 
         return self[self.active_key]
 
@@ -150,13 +148,14 @@ class NotifyingDict(dict):
             arguments
         """
         if not callable(observer):
-            raise TypeError('The observer should be callable')
+            raise TypeError("The observer should be callable")
 
         self.observers.append(observer)
 
 
 class CaptionCreator:
     """Creates and maintains a collection of Captions"""
+
     def __init__(self):
         self._collection = TimingCorrectingCaptionList()
 
@@ -212,6 +211,7 @@ class CaptionCreator:
         caption.start = start
         caption.end = end
         self._still_editing = [caption]
+        current_position = (0, 0)
 
         for instruction in node_buffer:
             # skip empty elements
@@ -219,42 +219,51 @@ class CaptionCreator:
                 continue
 
             elif instruction.requires_repositioning():
-                caption = PreCaption()
-                caption.start = start
-                caption.end = end
-                self._still_editing.append(caption)
+                skip_repositioning = False
+                if instruction.position[0] == current_position[0]:
+                    last_text_node = None
+                    text_length = 0
+                    for node in caption.nodes:
+                        if node.type_ == CaptionNode.TEXT:
+                            text_length += len(node.content)
+                            last_text_node = node
+                    if abs(current_position[1] + text_length - instruction.position[1]) <= 1:
+                        # If it's on the same row, and close enough, append it after a space.
+                        if last_text_node:
+                            last_text_node.content += " "
+                        skip_repositioning = True
+                if not skip_repositioning:
+                    caption = PreCaption()
+                    caption.start = start
+                    caption.end = end
+                    self._still_editing.append(caption)
+                    current_position = instruction.position
 
             # handle line breaks
             elif instruction.is_explicit_break():
-                caption.nodes.append(CaptionNode.create_break(
-                    layout_info=_get_layout_from_tuple(instruction.position)
-                ))
+                caption.nodes.append(CaptionNode.create_break(layout_info=_get_layout_from_tuple(instruction.position)))
 
             # handle open italics
             elif instruction.sets_italics_on():
                 caption.nodes.append(
                     CaptionNode.create_style(
-                        True, {'italics': True},
-                        layout_info=_get_layout_from_tuple(
-                            instruction.position
-                        ))
+                        True, {"italics": True}, layout_info=_get_layout_from_tuple(instruction.position)
+                    )
                 )
 
             # handle clone italics
             elif instruction.sets_italics_off():
                 caption.nodes.append(
                     CaptionNode.create_style(
-                        False, {'italics': True},
-                        layout_info=_get_layout_from_tuple(
-                            instruction.position)
-                    ))
+                        False, {"italics": True}, layout_info=_get_layout_from_tuple(instruction.position)
+                    )
+                )
 
             # handle text
             elif instruction.is_text_node():
                 layout_info = _get_layout_from_tuple(instruction.position)
                 caption.nodes.append(
-                    CaptionNode.create_text(
-                        instruction.get_text(), layout_info=layout_info),
+                    CaptionNode.create_text(instruction.get_text(), layout_info=layout_info),
                 )
                 caption.layout_info = layout_info
 
@@ -275,6 +284,7 @@ class InstructionNodeCreator:
     """Creates _InstructionNode instances from characters and commands, storing
     them internally
     """
+
     def __init__(self, collection=None, position_tracker=None):
         """
         :param collection: an optional collection of nodes
@@ -304,8 +314,11 @@ class InstructionNodeCreator:
         current_position = self._position_tracer.get_current_position()
 
         # get or create a usable node
-        if (self._collection and self._collection[-1].is_text_node()
-                and not self._position_tracer.is_repositioning_required()):
+        if (
+            self._collection
+            and self._collection[-1].is_text_node()
+            and not self._position_tracer.is_repositioning_required()
+        ):
             node = self._collection[-1]
         else:
             # create first node
@@ -315,19 +328,14 @@ class InstructionNodeCreator:
         # handle a simple line break
         if self._position_tracer.is_linebreak_required():
             # must insert a line break here
-            self._collection.append(_InstructionNode.create_break(
-                position=current_position))
+            self._collection.append(_InstructionNode.create_break(position=current_position))
             node = _InstructionNode.create_text(current_position)
             self._collection.append(node)
             self._position_tracer.acknowledge_linebreak_consumed()
 
         # handle completely new positioning
         elif self._position_tracer.is_repositioning_required():
-            self._collection.append(
-                _InstructionNode.create_repositioning_command(
-                    current_position
-                )
-            )
+            self._collection.append(_InstructionNode.create_repositioning_command(current_position))
             node = _InstructionNode.create_text(current_position)
             self._collection.append(node)
             self._position_tracer.acknowledge_position_changed()
@@ -344,20 +352,16 @@ class InstructionNodeCreator:
         """
         self._update_positioning(command)
 
-        text = COMMANDS.get(command, '')
+        text = COMMANDS.get(command, "")
 
-        if 'italic' in text:
-            if 'end' not in text:
+        if "italic" in text:
+            if "end" not in text:
                 self._collection.append(
-                    _InstructionNode.create_italics_style(
-                        self._position_tracer.get_current_position())
+                    _InstructionNode.create_italics_style(self._position_tracer.get_current_position())
                 )
             else:
                 self._collection.append(
-                    _InstructionNode.create_italics_style(
-                        self._position_tracer.get_current_position(),
-                        turn_on=False
-                    )
+                    _InstructionNode.create_italics_style(self._position_tracer.get_current_position(), turn_on=False)
                 )
 
     def _update_positioning(self, command):
@@ -368,8 +372,7 @@ class InstructionNodeCreator:
         if command in PAC_TAB_OFFSET_COMMANDS:
             tab_offset = PAC_TAB_OFFSET_COMMANDS[command]
             prev_positioning = self._position_tracer.default
-            positioning = (prev_positioning[0],
-                           prev_positioning[1] + tab_offset)
+            positioning = (prev_positioning[0], prev_positioning[1] + tab_offset)
         else:
             first, second = command[:2], command[2:]
 
@@ -406,7 +409,7 @@ class InstructionNodeCreator:
             # use space to separate the stashes, but don't add final space
             if idx < len(stash_list) - 1:
                 try:
-                    instance._collection[-1].add_chars(' ')
+                    instance._collection[-1].add_chars(" ")
                 except AttributeError:
                     pass
 
@@ -423,16 +426,11 @@ class InstructionNodeCreator:
 
         :type accented_character: str
         """
-        is_text_node = (
-                self._collection and
-                self._collection[-1].is_text_node() and
-                self._collection[-1].text
-                )
+        is_text_node = self._collection and self._collection[-1].is_text_node() and self._collection[-1].text
         if is_text_node:
             try:
                 ascii_char = [
-                    unicodedata.normalize('NFD', accented_character)
-                    .encode('ascii', 'strict').decode("utf-8")
+                    unicodedata.normalize("NFD", accented_character).encode("ascii", "strict").decode("utf-8")
                 ]
             except (UnicodeEncodeError, UnicodeDecodeError):
                 ascii_char = INCONVERTIBLE_TO_ASCII_EXTENDED_CHARS_ASSOCIATION.get(accented_character)
@@ -460,10 +458,9 @@ def _get_layout_from_tuple(position_tuple):
     horizontal = Size(80 * column / 32.0 + 10, UnitEnum.PERCENT)
     # Vertical safe area between 5% and 95%
     vertical = Size(90 * (row - 1) / 15.0 + 5, UnitEnum.PERCENT)
-    return Layout(origin=Point(horizontal, vertical),
-                  alignment=Alignment(HorizontalAlignmentEnum.LEFT,
-                                      VerticalAlignmentEnum.TOP)
-                  )
+    return Layout(
+        origin=Point(horizontal, vertical), alignment=Alignment(HorizontalAlignmentEnum.LEFT, VerticalAlignmentEnum.TOP)
+    )
 
 
 class _InstructionNode:
@@ -473,6 +470,7 @@ class _InstructionNode:
     These nodes will be aggregated into a RepresentableNode, which will then
     be easily converted to a CaptionNode.
     """
+
     TEXT = 0
     BREAK = 1
     ITALICS_ON = 2
@@ -497,9 +495,9 @@ class _InstructionNode:
         :return:
         """
         if self.text is None:
-            self.text = ''
+            self.text = ""
 
-        self.text += ''.join(args)
+        self.text += "".join(args)
 
     def is_text_node(self):
         """
@@ -549,7 +547,7 @@ class _InstructionNode:
 
     def get_text(self):
         """A little legacy code."""
-        return ' '.join(self.text.split())
+        return " ".join(self.text.split())
 
     @classmethod
     def create_break(cls, position):
@@ -574,7 +572,7 @@ class _InstructionNode:
 
         :rtype: _InstructionNode
         """
-        return cls(''.join(chars), position=position)
+        return cls("".join(chars), position=position)
 
     @classmethod
     def create_italics_style(cls, position, turn_on=True):
@@ -588,10 +586,7 @@ class _InstructionNode:
 
         :rtype: _InstructionNode
         """
-        return cls(
-            position=position,
-            type_=cls.ITALICS_ON if turn_on else cls.ITALICS_OFF
-        )
+        return cls(position=position, type_=cls.ITALICS_ON if turn_on else cls.ITALICS_OFF)
 
     @classmethod
     def create_repositioning_command(cls, position=None):
@@ -602,19 +597,17 @@ class _InstructionNode:
         """
         return cls(type_=cls.CHANGE_POSITION, position=position)
 
-    def __repr__(self):         # pragma: no cover
+    def __repr__(self):  # pragma: no cover
         if self._type == self.BREAK:
-            extra = 'BR'
+            extra = "BR"
         elif self._type == self.TEXT:
             extra = f'"{self.text}"'
         elif self._type in (self.ITALICS_ON, self.ITALICS_OFF):
-            extra = 'italics {}'.format(
-                'on' if self._type == self.ITALICS_ON else 'off'
-            )
+            extra = "italics {}".format("on" if self._type == self.ITALICS_ON else "off")
         else:
-            extra = 'change position'
+            extra = "change position"
 
-        return f'<INode: {extra} >'
+        return f"<INode: {extra} >"
 
 
 def _format_italics(collection):
@@ -762,8 +755,7 @@ def _skip_empty_text_nodes(collection):
     :type collection: list[_InstructionNode]
     :rtype: list[_InstructionNode]
     """
-    return [node for node in collection
-            if not (node.is_text_node() and node.is_empty())]
+    return [node for node in collection if not (node.is_text_node() and node.is_empty())]
 
 
 def _skip_redundant_italics_nodes(collection):
@@ -795,12 +787,12 @@ def _skip_redundant_italics_nodes(collection):
 
 def _close_italics_before_repositioning(collection):
     """Make sure that for every opened italic node, there's a corresponding
-     closing node.
+    closing node.
 
-     Will insert a closing italic node, before each repositioning node
+    Will insert a closing italic node, before each repositioning node
 
-     :type collection: list[_InstructionNode]
-     :rtype: list[_InstructionNode]
+    :type collection: list[_InstructionNode]
+    :rtype: list[_InstructionNode]
     """
     new_collection = []
 
@@ -819,16 +811,12 @@ def _close_italics_before_repositioning(collection):
                 _InstructionNode.create_italics_style(
                     # The position info of this new node should be the same
                     position=last_italics_on_node.position,
-                    turn_on=False
+                    turn_on=False,
                 )
             )
             new_collection.append(node)
             # Append an italics opening node after the positioning change
-            new_collection.append(
-                _InstructionNode.create_italics_style(
-                    position=node.position
-                )
-            )
+            new_collection.append(_InstructionNode.create_italics_style(position=node.position))
             continue
         new_collection.append(node)
 
@@ -855,9 +843,6 @@ def _ensure_final_italics_node_closes(collection):
 
     if italics_on:
         new_collection.append(
-            _InstructionNode.create_italics_style(
-                position=last_italics_on_node.position,
-                turn_on=False
-            )
+            _InstructionNode.create_italics_style(position=last_italics_on_node.position, turn_on=False)
         )
     return new_collection
