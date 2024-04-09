@@ -211,7 +211,7 @@ class CaptionCreator:
         caption.start = start
         caption.end = end
         self._still_editing = [caption]
-        current_position = (0, 0)
+        current_row = -1
 
         for instruction in node_buffer:
             # skip empty elements
@@ -220,28 +220,27 @@ class CaptionCreator:
 
             elif instruction.requires_repositioning():
                 skip_repositioning = False
-                if instruction.position[0] == current_position[0]:
+                if instruction.position[0] == current_row:
                     last_text_node = None
                     text_length = 0
                     for node in caption.nodes:
                         if node.type_ == CaptionNode.TEXT:
                             text_length += len(node.content)
                             last_text_node = node
-                    if abs(current_position[1] + text_length - instruction.position[1]) <= 1:
-                        # If it's on the same row, and close enough, append it after a space.
-                        if last_text_node:
-                            last_text_node.content += " "
-                        skip_repositioning = True
+                    if last_text_node:
+                        last_text_node.content += " "
+                    skip_repositioning = True
                 if not skip_repositioning:
                     caption = PreCaption()
                     caption.start = start
                     caption.end = end
                     self._still_editing.append(caption)
-                    current_position = instruction.position
+                    current_row = instruction.position[0]
 
             # handle line breaks
             elif instruction.is_explicit_break():
                 caption.nodes.append(CaptionNode.create_break(layout_info=_get_layout_from_tuple(instruction.position)))
+                current_row += 1
 
             # handle open italics
             elif instruction.sets_italics_on():
@@ -266,6 +265,8 @@ class CaptionCreator:
                     CaptionNode.create_text(instruction.get_text(), layout_info=layout_info),
                 )
                 caption.layout_info = layout_info
+            if current_row < 0:
+                current_row = instruction.position[0]
 
         self._collection.extend(self._still_editing)
 
