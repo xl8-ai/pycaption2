@@ -641,7 +641,7 @@ class SAMIParser(HTMLParser):
         self.line = ''
         self.styles = {}
         self.queue = deque()
-        self.langs = set()
+        self.langs = {}  # Maintain the order of appearences
         self.last_element = ''
         self.name2codepoint = name2codepoint.copy()
         self.name2codepoint['apos'] = 0x0027
@@ -666,7 +666,7 @@ class SAMIParser(HTMLParser):
             # if no language detected, set it as the default
             lang = lang or DEFAULT_LANGUAGE_CODE
             attrs.append(('lang', lang))
-            self.langs.add(lang)
+            self.langs[lang] = True
 
         # clean-up line breaks
         if tag == 'br':
@@ -756,7 +756,7 @@ class SAMIParser(HTMLParser):
             closing_tag = self.queue.pop()
             self.sami += f"</{closing_tag}>"
 
-        return self.sami, self.styles, self.langs
+        return self.sami, self.styles, list(self.langs)
 
     # parse the SAMI's stylesheet
     def _css_parse(self, css):
