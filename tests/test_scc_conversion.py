@@ -9,6 +9,7 @@ from pycaption import (
     WebVTTWriter,
 )
 
+from pycaption.scc import _SccTimeTranslator
 from tests.mixins import CaptionSetTestingMixIn
 
 # This is quite fuzzy at the moment.
@@ -26,6 +27,57 @@ class TestSRTtoSCCtoSRT(CaptionSetTestingMixIn):
 
     def test_srt_to_scc_to_srt_conversion(self, sample_srt_ascii):
         self._test_srt_to_scc_to_srt_conversion(sample_srt_ascii)
+
+    @staticmethod
+    def timecode_to_frame(timestamp: str) -> int:
+        values = [int(value) for value in timestamp.split(":")]
+        return (values[0] * 3600 + values[1] * 60 + values[2]) * 30 + values[3]
+
+    def test_timecode_overrun_conversion(self, sample_srt_for_scc_overrun):
+        caption = SRTReader().read(sample_srt_for_scc_overrun)
+
+        scc_results = SCCWriter().write(caption)
+        scc_captions = SCCReader().read(scc_results)
+        self.assert_captionset_almost_equals(caption, scc_captions, TOLERANCE_MICROSECONDS)
+        code_starts = [self.timecode_to_frame(line.split()[0]) for line in scc_results.splitlines()[1:] if line.strip()]
+        code_length = [len(line.split()) - 1 for line in scc_results.splitlines()[1:] if line.strip()]
+        no_overrun = [
+            start + length <= next_start for start, next_start, length in zip(code_starts, code_starts[1:], code_length)
+        ]
+        timecodes = [
+            (round(caption.start / 1001), round(caption.end / 1001)) for caption in scc_captions.get_captions("en-US")
+        ]
+        # Keeps the original timestamps, but overrun happens.
+        assert not all(no_overrun)
+        assert timecodes == [(5000, 5500), (10000, 10500), (10500, 15000)]
+
+        scc_results = SCCWriter(min_duration_frames=1).write(caption)
+        scc_captions = SCCReader().read(scc_results)
+        code_starts = [self.timecode_to_frame(line.split()[0]) for line in scc_results.splitlines()[1:] if line.strip()]
+        code_length = [len(line.split()) - 1 for line in scc_results.splitlines()[1:] if line.strip()]
+        no_overrun = [
+            start + length <= next_start for start, next_start, length in zip(code_starts, code_starts[1:], code_length)
+        ]
+        timecodes = [
+            (round(caption.start / 1001), round(caption.end / 1001)) for caption in scc_captions.get_captions("en-US")
+        ]
+        # Pushed the third caption so it can fit the third caption cordwords.
+        assert all(no_overrun)
+        assert timecodes == [(5000, 5500), (10000, 11133), (11133, 15000)]
+
+        scc_results = SCCWriter(min_duration_frames=60).write(caption)
+        scc_captions = SCCReader().read(scc_results)
+        code_starts = [self.timecode_to_frame(line.split()[0]) for line in scc_results.splitlines()[1:] if line.strip()]
+        code_length = [len(line.split()) - 1 for line in scc_results.splitlines()[1:] if line.strip()]
+        no_overrun = [
+            start + length <= next_start for start, next_start, length in zip(code_starts, code_starts[1:], code_length)
+        ]
+        timecodes = [
+            (round(caption.start / 1001), round(caption.end / 1001)) for caption in scc_captions.get_captions("en-US")
+        ]
+        # Enforced 60 frames (2s after ndf adjusted) minimum duration.
+        assert all(no_overrun)
+        assert timecodes == [(5000, 7000), (10000, 12000), (12000, 15000)]
 
 
 # The following test fails -- maybe a bug with SCCReader

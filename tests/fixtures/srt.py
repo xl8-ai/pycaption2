@@ -196,3 +196,20 @@ see that it reaches
 the hands of Mr
 Sherlock Holmes
 """
+
+
+@pytest.fixture(scope="session")
+def sample_srt_for_scc_overrun():
+    return """1
+00:00:05,000 --> 00:00:05,500
+Hello
+
+2
+00:00:10,000 --> 00:00:10,500
+How are you?
+
+3
+00:00:10,500 --> 00:00:15,000
+A very long subtitle to trigger
+some timecode overrun.
+"""

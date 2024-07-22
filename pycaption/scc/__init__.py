@@ -82,6 +82,7 @@ import re
 import textwrap
 from collections import deque
 from copy import deepcopy
+from typing import Optional
 
 from pycaption.base import BaseReader
 from pycaption.base import BaseWriter
@@ -498,8 +499,10 @@ class SCCReader(BaseReader):
 
 
 class SCCWriter(BaseWriter):
-    def __init__(self, *args, **kw):
+    def __init__(self, min_duration_frames: int = 0, *args, **kw):
         super().__init__(*args, **kw)
+        # If min_duration_frames > 0, it will enforce min duration to avoid timecode overrun.
+        self.min_duration_frames = min_duration_frames
 
     def write(self, caption_set):
         output = HEADER + "\n\n"
@@ -514,26 +517,42 @@ class SCCWriter(BaseWriter):
         captions = caption_set.get_captions(lang)
 
         # PASS 1: compute codes for each caption
-        codes = [(self._text_to_code(caption), caption.start, caption.end) for caption in captions]
+        codes = [(self._text_to_code(caption), caption.start, caption.start, caption.end) for caption in captions]
+        min_duration_msec = max(0.0, self.min_duration_frames * MICROSECONDS_PER_CODEWORD)
 
         # PASS 2:
         # Advance start times so as to have time to write to the pop-on
         # buffer; possibly remove the previous clear-screen command
-        for index, (code, start, end) in enumerate(codes):
+        for index, (code, code_start, start, end) in enumerate(codes):
             # Subtract 1 code word because the last code word (942f) should be at the start frame.
             code_words = len(code) / 5 + 4 - 1
             code_time_microseconds = code_words * MICROSECONDS_PER_CODEWORD
             code_start = start - code_time_microseconds
             if index > 0:
-                previous_code, previous_start, previous_end = codes[index - 1]
-                if previous_end + 2 * MICROSECONDS_PER_CODEWORD >= code_start:
-                    codes[index - 1] = (previous_code, previous_start, None)
-            codes[index] = (code, code_start, end)
+                previous_code, previous_code_start, previous_start, previous_end = codes[index - 1]
+                if min_duration_msec:
+                    # Enforce previous caption at least min duration, and avoid timecode overrun.
+                    code_start = max(
+                        max(start, previous_start + min_duration_msec) - code_time_microseconds,
+                        previous_start + MICROSECONDS_PER_CODEWORD,
+                    )
+                    # Calculate the actual time the caption is displayed.
+                    start = code_start + code_time_microseconds
+
+                if previous_end + MICROSECONDS_PER_CODEWORD >= code_start:
+                    # Skip the clear caption command on the previous caption.
+                    codes[index - 1] = (previous_code, previous_code_start, previous_start, None)
+            if min_duration_msec:
+                end = max(end, start + min_duration_msec)
+            else:
+                # Handle negative or zero duration captions.
+                end = max(end, start + MICROSECONDS_PER_CODEWORD)
+            codes[index] = (code, code_start, start, end)
 
         # PASS 3:
         # Write captions.
-        for code, start, end in codes:
-            output += f"{self._format_timestamp(max(0, start))}\t"
+        for code, code_start, _, end in codes:
+            output += f"{self._format_timestamp(max(0, code_start))}\t"
             output += "94ae 9420 "
             output += code
             output += "942c 942f\n\n"
@@ -624,13 +643,10 @@ class SCCWriter(BaseWriter):
         seconds_float = microseconds / 1000.0 / 1000.0
         # Convert to non-drop-frame timecode
         seconds_float *= 1000.0 / 1001.0
-        hours = math.floor(seconds_float / 3600)
-        seconds_float -= hours * 3600
-        minutes = math.floor(seconds_float / 60)
-        seconds_float -= minutes * 60
-        seconds = math.floor(seconds_float)
-        seconds_float -= seconds
-        frames = round(seconds_float * 30)
+        frame_num = round(seconds_float * 30)
+        seconds, frames = divmod(frame_num, 30)
+        minutes, seconds = divmod(seconds, 60)
+        hours, minutes = divmod(minutes, 60)
         return f"{hours:02}:{minutes:02}:{seconds:02}:{frames:02}"
 
 

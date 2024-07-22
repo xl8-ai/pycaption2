@@ -68,6 +68,7 @@ from tests.fixtures.srt import (  # noqa: F401
     sample_srt_blank_lines, sample_srt_trailing_blanks,
     samples_srt_same_time, sample_srt_empty_cue_output,
     sample_srt_timestamps_without_microseconds,
+    sample_srt_for_scc_overrun,
 )
 from tests.fixtures.translated_scc import (  # noqa: F401
     sample_translated_scc_custom_brackets, sample_translated_scc_success,
